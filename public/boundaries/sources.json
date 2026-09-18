@@ -1,0 +1,107 @@
+[
+  {
+    "country": "co",
+    "level": "ADM0",
+    "source": "https://github.com/wmgeolab/geoBoundaries/raw/9469f09/releaseData/gbOpen/COL/ADM0/geoBoundaries-COL-ADM0_simplified.geojson",
+    "license": "CC0 1.0 Universal (CC0 1.0) Public Domain Dedication",
+    "boundarySource": "Geoboundaries, Wikimedia"
+  },
+  {
+    "country": "co",
+    "level": "ADM1",
+    "source": "https://github.com/wmgeolab/geoBoundaries/raw/9469f09/releaseData/gbOpen/COL/ADM1/geoBoundaries-COL-ADM1_simplified.geojson",
+    "license": "Open Data Commons Open Database License 1.0",
+    "boundarySource": "OpenStreetMap, Wambacher"
+  },
+  {
+    "country": "co",
+    "level": "ADM2",
+    "source": "https://github.com/wmgeolab/geoBoundaries/raw/9469f09/releaseData/gbOpen/COL/ADM2/geoBoundaries-COL-ADM2_simplified.geojson",
+    "license": "Creative Commons Attribution 4.0 International (CC BY 4.0)",
+    "boundarySource": "Departamento Administrativo Nacional de Estadistica"
+  },
+  {
+    "country": "mx",
+    "level": "ADM0",
+    "source": "https://github.com/wmgeolab/geoBoundaries/raw/9469f09/releaseData/gbOpen/MEX/ADM0/geoBoundaries-MEX-ADM0_simplified.geojson",
+    "license": "Creative Commons Attribution 4.0 (CC BY 4.0)",
+    "boundarySource": "geoBoundaries, World Bank"
+  },
+  {
+    "country": "mx",
+    "level": "ADM1",
+    "source": "https://github.com/wmgeolab/geoBoundaries/raw/90a1d52/releaseData/gbOpen/MEX/ADM1/geoBoundaries-MEX-ADM1_simplified.geojson",
+    "license": "Creative Commons Attribution 3.0 Intergovernmental Organisations (CC BY 3.0 IGO)",
+    "boundarySource": "Instituto Nacional de Estadística y Geografía (INEGI)"
+  },
+  {
+    "country": "mx",
+    "level": "ADM2",
+    "source": "https://github.com/wmgeolab/geoBoundaries/raw/9469f09/releaseData/gbOpen/MEX/ADM2/geoBoundaries-MEX-ADM2_simplified.geojson",
+    "license": "Creative Commons Attribution 4.0 (CC BY 4.0)",
+    "boundarySource": "World Bank"
+  },
+  {
+    "country": "ar",
+    "level": "ADM0",
+    "source": "https://github.com/wmgeolab/geoBoundaries/raw/9469f09/releaseData/gbOpen/ARG/ADM0/geoBoundaries-ARG-ADM0_simplified.geojson",
+    "license": "Creative Commons Attribution 2.5 Generic",
+    "boundarySource": "geoBoundaries, Wikimedia"
+  },
+  {
+    "country": "ar",
+    "level": "ADM1",
+    "source": "https://github.com/wmgeolab/geoBoundaries/raw/9469f09/releaseData/gbOpen/ARG/ADM1/geoBoundaries-ARG-ADM1_simplified.geojson",
+    "license": "Creative Commons Attribution 2.5 Generic",
+    "boundarySource": "geoBoundaries, Wikimedia"
+  },
+  {
+    "country": "ar",
+    "level": "ADM2",
+    "source": "https://github.com/wmgeolab/geoBoundaries/raw/9469f09/releaseData/gbOpen/ARG/ADM2/geoBoundaries-ARG-ADM2_simplified.geojson",
+    "license": "Creative Commons Attribution 3.0 Intergovernmental Organisations (CC BY 3.0 IGO)",
+    "boundarySource": "Instituto Geografico Nacional and UNHCR, OCHA ROLAC"
+  },
+  {
+    "country": "es",
+    "level": "ADM0",
+    "source": "https://github.com/wmgeolab/geoBoundaries/raw/9469f09/releaseData/gbOpen/ESP/ADM0/geoBoundaries-ESP-ADM0_simplified.geojson",
+    "license": "Creative Commons Attribution 4.0 International (CC BY 4.0)",
+    "boundarySource": "Instituto de Geografico Nacional"
+  },
+  {
+    "country": "es",
+    "level": "ADM1",
+    "source": "https://github.com/wmgeolab/geoBoundaries/raw/9469f09/releaseData/gbOpen/ESP/ADM1/geoBoundaries-ESP-ADM1_simplified.geojson",
+    "license": "Creative Commons Attribution 4.0 International (CC BY 4.0)",
+    "boundarySource": "Instituto de Geografico Nacional"
+  },
+  {
+    "country": "es",
+    "level": "ADM3",
+    "source": "https://github.com/wmgeolab/geoBoundaries/raw/9469f09/releaseData/gbOpen/ESP/ADM3/geoBoundaries-ESP-ADM3_simplified.geojson",
+    "license": "Creative Commons Attribution 4.0 International (CC BY 4.0)",
+    "boundarySource": "Open Data ESRI, IGN Central Registry of Cartography Area"
+  },
+  {
+    "country": "us",
+    "level": "ADM0",
+    "source": "https://github.com/wmgeolab/geoBoundaries/raw/9469f09/releaseData/gbOpen/USA/ADM0/geoBoundaries-USA-ADM0_simplified.geojson",
+    "license": "Public Domain",
+    "boundarySource": "United States Census Bureau, MAF/TIGER Database"
+  },
+  {
+    "country": "us",
+    "level": "ADM1",
+    "source": "https://github.com/wmgeolab/geoBoundaries/raw/9469f09/releaseData/gbOpen/USA/ADM1/geoBoundaries-USA-ADM1_simplified.geojson",
+    "license": "Public Domain",
+    "boundarySource": "United States Census Bureau, MAF/TIGER Database"
+  },
+  {
+    "country": "us",
+    "level": "ADM2",
+    "source": "https://github.com/wmgeolab/geoBoundaries/raw/9469f09/releaseData/gbOpen/USA/ADM2/geoBoundaries-USA-ADM2_simplified.geojson",
+    "license": "Public Domain",
+    "boundarySource": "United States Census Bureau, MAF/TIGER Database"
+  }
+]
