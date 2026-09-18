@@ -40,6 +40,7 @@ En Estados Unidos se incluyen Walmart, Target y Costco, más 15 cadenas adiciona
 
 ## Explorar la demo
 
+- Cambia entre español, inglés y portugués con el botón de idioma sobre el mapa. La selección se conserva en este navegador y traduce los controles, leyendas y fichas de la interfaz.
 - Filtra cadenas desde las casillas del listado. Los puntos, H3, calor e indicadores se actualizan juntos.
 - Busca una tienda o ciudad del país seleccionado para acercar el mapa; una tienda abre su ficha.
 - Usa **Restablecer vista** para recuperar el encuadre del país y poner el giro y la inclinación en cero.
