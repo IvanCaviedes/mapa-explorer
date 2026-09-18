@@ -6,6 +6,7 @@ export type StoreBrand = {
   name: string;
   color: [number, number, number];
   sourceUrl: string;
+  sampleCount?: number;
 };
 export type Store = {
   id: string;
@@ -20,13 +21,14 @@ export type Store = {
   coordinates: [number, number];
   hex: string;
 };
-export type StoreHex = { hex: string; count: number; brandCounts: Record<string, number>; color: [number, number, number] };
+export type StoreHex = { hex: string; count: number; brandCounts: Record<string, number> };
 export type MobilitySample = {
   storeId: string;
   brandId: string;
   city: string;
   coordinates: [number, number];
   intensityByHour: number[];
+  passersbyByHour: number[];
 };
 export type CountryDefinition = {
   id: string;
@@ -39,16 +41,13 @@ export type CountryDefinition = {
   mobility: MobilitySample[];
 };
 type CitySeed = [string, string, number, number];
-export function aggregateStores(stores: Store[], brands: StoreBrand[], resolution: number): StoreHex[] {
+export function aggregateStores(stores: Store[], resolution: number): StoreHex[] {
   const cells = new Map<string, StoreHex>();
   for (const store of stores) {
     const hex = cellToParent(store.hex, resolution);
-    const cell = cells.get(hex) ?? { hex, count: 0, brandCounts: {}, color: store.color };
+    const cell = cells.get(hex) ?? { hex, count: 0, brandCounts: {} };
     cell.count++;
     cell.brandCounts[store.brandId] = (cell.brandCounts[store.brandId] ?? 0) + 1;
-    const leader = brands.reduce((best, brand) =>
-      (cell.brandCounts[brand.id] ?? 0) > (cell.brandCounts[best.id] ?? 0) ? brand : best, brands[0]);
-    cell.color = leader.color;
     cells.set(hex, cell);
   }
   return [...cells.values()];
@@ -77,7 +76,7 @@ function buildCountry(
     name: cityName, region, coordinates: [longitude, latitude] as [number, number],
   }));
   const stores = cities.flatMap((city, cityIndex) => brands.flatMap((brand, brandIndex) =>
-    Array.from({ length: 30 }, (_, index) => {
+    Array.from({ length: brand.sampleCount ?? 30 }, (_, index) => {
       const [longitude, latitude] = sampleStore(city, cityIndex, brandIndex, index);
       return {
         id: id + "-" + cityIndex + "-" + brand.id + "-" + index,
@@ -97,19 +96,13 @@ function buildCountry(
       };
     })
   ));
-  const mobility = stores
-    .flatMap((store, index) => Array.from({ length: 1 }, (_, sampleIndex) => {
-      const angle = ((index * 0.61803398875 + sampleIndex / 3) % 1) * Math.PI * 2;
-      const distanceKm = 0.15 + sampleIndex * 0.28;
-      const latitude = store.coordinates[1] + Math.sin(angle) * distanceKm / 111;
-      const longitude = store.coordinates[0] + Math.cos(angle) * distanceKm /
-        (111 * Math.cos(store.coordinates[1] * Math.PI / 180));
+  const mobility = stores.map((store, index) => {
       const intensityByHour = Array.from({ length: 24 }, (_, hour) => {
         const variation = (index % 7) - 3;
         const morning = Math.exp(-Math.pow((hour - 8 - variation * 0.2) / 2.4, 2));
         const midday = Math.exp(-Math.pow((hour - 13) / 3.4, 2));
         const evening = Math.exp(-Math.pow((hour - 18 + variation * 0.2) / 2.8, 2));
-        const localFactor = 0.65 + ((index * 17 + sampleIndex * 11) % 31) / 50;
+        const localFactor = 0.65 + (index * 17 % 31) / 50;
         return Math.min(1, Number(((0.035 + morning * 0.38 + midday * 0.5 +
           evening * 0.72) * localFactor).toFixed(3)));
       });
@@ -117,10 +110,11 @@ function buildCountry(
         storeId: store.id,
         brandId: store.brandId,
         city: store.city,
-        coordinates: [longitude, latitude] as [number, number],
+        coordinates: store.coordinates,
         intensityByHour,
+        passersbyByHour: intensityByHour.map((value) => Math.round(20 + value * 200)),
       };
-    }));
+    });
   return { id, name, center, zoom, brands, cities, stores, mobility };
 }
 
@@ -163,6 +157,21 @@ export const countries: CountryDefinition[] = [
     { id: "walmart-us", name: "Walmart", color: [35, 105, 202], sourceUrl: "https://www.walmart.com/store-finder" },
     { id: "target", name: "Target", color: [205, 47, 60], sourceUrl: "https://www.target.com/store-locator/store-directory" },
     { id: "costco", name: "Costco", color: [31, 139, 112], sourceUrl: "https://www.costco.com/warehouse/locator.aspx" },
+    { id: "kroger", name: "Kroger", color: [40, 83, 185], sourceUrl: "https://www.kroger.com/", sampleCount: 10 },
+    { id: "aldi", name: "ALDI", color: [0, 121, 161], sourceUrl: "https://www.aldi.us/", sampleCount: 10 },
+    { id: "trader-joes", name: "Trader Joe's", color: [190, 52, 45], sourceUrl: "https://www.traderjoes.com/", sampleCount: 10 },
+    { id: "whole-foods", name: "Whole Foods", color: [32, 107, 66], sourceUrl: "https://www.wholefoodsmarket.com/", sampleCount: 10 },
+    { id: "publix", name: "Publix", color: [53, 139, 65], sourceUrl: "https://www.publix.com/", sampleCount: 10 },
+    { id: "safeway", name: "Safeway", color: [193, 54, 68], sourceUrl: "https://www.safeway.com/", sampleCount: 10 },
+    { id: "cvs", name: "CVS", color: [204, 51, 71], sourceUrl: "https://www.cvs.com/", sampleCount: 10 },
+    { id: "walgreens", name: "Walgreens", color: [180, 44, 64], sourceUrl: "https://www.walgreens.com/", sampleCount: 10 },
+    { id: "home-depot", name: "The Home Depot", color: [224, 104, 38], sourceUrl: "https://www.homedepot.com/", sampleCount: 10 },
+    { id: "lowes", name: "Lowe's", color: [42, 82, 151], sourceUrl: "https://www.lowes.com/", sampleCount: 10 },
+    { id: "best-buy", name: "Best Buy", color: [217, 173, 37], sourceUrl: "https://www.bestbuy.com/", sampleCount: 10 },
+    { id: "7-eleven", name: "7-Eleven", color: [228, 103, 47], sourceUrl: "https://www.7-eleven.com/", sampleCount: 10 },
+    { id: "dollar-general", name: "Dollar General", color: [188, 157, 35], sourceUrl: "https://www.dollargeneral.com/", sampleCount: 10 },
+    { id: "tj-maxx", name: "TJ Maxx", color: [154, 55, 123], sourceUrl: "https://tjmaxx.tjx.com/", sampleCount: 10 },
+    { id: "ross", name: "Ross Dress for Less", color: [111, 70, 151], sourceUrl: "https://www.rossstores.com/", sampleCount: 10 },
   ], [
     ["Nueva York", "Nueva York", -74.0060, 40.7128], ["Los Ángeles", "California", -118.2437, 34.0522],
     ["Chicago", "Illinois", -87.6298, 41.8781], ["Houston", "Texas", -95.3698, 29.7604],

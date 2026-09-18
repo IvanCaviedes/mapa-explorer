@@ -5,9 +5,9 @@ import * as maplibregl from "maplibre-gl";
 import type { Map as MapLibreMap } from "maplibre-gl";
 import { MapLibreOverlay } from "@deck.gl/maplibre";
 import { H3HexagonLayer } from "@deck.gl/geo-layers";
-import { cellToParent } from "h3-js";
 import { ScatterplotLayer } from "@deck.gl/layers";
-import { aggregateStores, countries, type Store } from "./map-data";
+import { Activity, ChevronUp, Clock3, Filter, Globe2, Layers3, Map, RotateCcw, Search, Store as StoreIcon, type LucideIcon } from "lucide-react";
+import { aggregateStores, countries, type Store, type StoreHex } from "./map-data";
 import {
   boundaryLevel,
   boundaryLevelName,
@@ -35,6 +35,7 @@ type Selection = {
   address?: string;
   description?: string;
   hex?: string;
+  hexId?: string;
   storeId?: string;
 };
 const layerMeta: {
@@ -42,11 +43,20 @@ const layerMeta: {
   name: string;
   description: string;
   color: string;
+  icon: LucideIcon;
 }[] = [
-  { id: "stores", name: "Tiendas", description: "Ubicaciones de ejemplo y zonas H3", color: "#EA00AD" },
-  { id: "territory", name: "Territorio", description: "País, regiones y divisiones locales", color: "#6A2876" },
-  { id: "mobility", name: "Actividad", description: "Concentración simulada por hora", color: "#FF6500" },
+  { id: "stores", name: "Tiendas", description: "Ubicaciones de ejemplo y zonas H3", color: "#EA00AD", icon: StoreIcon },
+  { id: "territory", name: "Territorio", description: "País, regiones y divisiones locales", color: "#6A2876", icon: Map },
+  { id: "mobility", name: "Actividad", description: "Personas simuladas cerca de cada tienda", color: "#FF6500", icon: Activity },
 ];
+
+function hexColor(item: StoreHex): [number, number, number] {
+  const brands = Object.keys(item.brandCounts).length;
+  if (brands >= 8) return [208, 54, 101];
+  if (brands >= 4) return [177, 61, 164];
+  if (brands >= 2) return [114, 83, 178];
+  return [74, 129, 179];
+}
 
 function distanceKm(a: [number, number], b: [number, number]): number {
   const toRadians = Math.PI / 180;
@@ -169,12 +179,12 @@ export default function MapExplorer() {
   const [level, setLevel] = useState<BoundaryLevel>(0);
   const [mapReady, setMapReady] = useState(false);
   const [mapError, setMapError] = useState(false);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const overlayRef = useRef<MapLibreOverlay | null>(null);
   const loadedRef = useRef({ country: "", region: "", local: "" });
   const countryFitRef = useRef(false);
-  const hexClickRef = useRef(new Map<string, number>());
   const lastOverlayClickRef = useRef(0);
   const country =
     countries.find((item) => item.id === countryId) ?? defaultCountry;
@@ -204,6 +214,7 @@ export default function MapExplorer() {
   const storeSamples = selectedStore
     ? country.mobility.filter((sample) => sample.storeId === selectedStore.id)
     : [];
+  const storePassersby = storeSamples[0]?.passersbyByHour[hour] ?? 0;
   const storeProfile = Array.from({ length: 24 }, (_, index) =>
     storeSamples.length
       ? Math.round(storeSamples.reduce((sum, sample) => sum + sample.intensityByHour[index], 0) /
@@ -248,8 +259,13 @@ export default function MapExplorer() {
       style: mapStyle,
       center: defaultCountry.center,
       zoom: 3,
+      pitch: 0,
+      maxPitch: 0,
+      dragRotate: false,
+      pitchWithRotate: false,
       attributionControl: false,
     });
+    map.touchZoomRotate.disableRotation();
     map.addControl(
       new maplibregl.NavigationControl({ showCompass: false }),
       "bottom-right",
@@ -262,67 +278,24 @@ export default function MapExplorer() {
       }),
       "bottom-left",
     );
-    const overlay = new MapLibreOverlay({ interleaved: false, layers: [] });
+    const overlay = new MapLibreOverlay({ interleaved: true, layers: [] });
     map.addControl(overlay);
     map.on("load", () => {
+      // Ocultar solo el relleno de colegios que distrae de las celdas H3.
+      for (const layer of map.getStyle().layers ?? []) {
+        if (layer.type === "fill-extrusion" || layer.type === "hillshade" ||
+            layer.id.toLowerCase().includes("building") ||
+            layer.id === "landuse_school") {
+          map.setLayoutProperty(layer.id, "visibility", "none");
+        }
+      }
+      map.setTerrain(null);
       addBoundaryLayers(
         map,
         setSelected,
         () => Date.now() - lastOverlayClickRef.current < 300,
       );
-      map.addSource("mobility-heat", { type: "geojson", data: emptyCollection });
-      map.addLayer({
-        id: "mobility-heat",
-        type: "heatmap",
-        source: "mobility-heat",
-        layout: { visibility: "none" },
-        paint: {
-          "heatmap-weight": ["get", "h12"],
-          "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 3, 0.7, 8, 1.2, 12, 1.6],
-          "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 3, 18, 8, 30, 12, 48],
-          "heatmap-opacity": 0.82,
-          "heatmap-color": ["interpolate", ["linear"], ["heatmap-density"],
-            0, "rgba(234, 0, 173, 0)",
-            0.2, "rgba(234, 0, 173, 0.48)",
-            0.45, "rgba(242, 66, 123, 0.72)",
-            0.7, "rgba(255, 101, 0, 0.88)",
-            1, "rgba(255, 161, 31, 1)"],
-        },
-      }, "local-line");
-      map.addLayer({
-        id: "mobility-gain",
-        type: "heatmap",
-        source: "mobility-heat",
-        layout: { visibility: "none" },
-        paint: {
-          "heatmap-weight": 0,
-          "heatmap-intensity": 1.4,
-          "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 3, 18, 8, 30, 12, 48],
-          "heatmap-opacity": 0.82,
-          "heatmap-color": ["interpolate", ["linear"], ["heatmap-density"],
-            0, "rgba(255, 181, 100, 0)",
-            0.3, "rgba(255, 181, 100, 0.65)",
-            0.65, "rgba(235, 87, 58, 0.9)",
-            1, "rgba(181, 40, 60, 1)"],
-        },
-      }, "local-line");
-      map.addLayer({
-        id: "mobility-loss",
-        type: "heatmap",
-        source: "mobility-heat",
-        layout: { visibility: "none" },
-        paint: {
-          "heatmap-weight": 0,
-          "heatmap-intensity": 1.4,
-          "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 3, 18, 8, 30, 12, 48],
-          "heatmap-opacity": 0.72,
-          "heatmap-color": ["interpolate", ["linear"], ["heatmap-density"],
-            0, "rgba(117, 205, 229, 0)",
-            0.3, "rgba(117, 205, 229, 0.6)",
-            0.65, "rgba(62, 147, 199, 0.85)",
-            1, "rgba(40, 91, 166, 1)"],
-        },
-      }, "local-line");
+      map.addSource("mobility-stores", { type: "geojson", data: emptyCollection });
       map.addSource("store-radius", { type: "geojson", data: emptyCollection });
       map.addLayer({
         id: "store-radius-fill", type: "fill", source: "store-radius",
@@ -332,6 +305,26 @@ export default function MapExplorer() {
         id: "store-radius-line", type: "line", source: "store-radius",
         paint: { "line-color": "#b82283", "line-width": 2, "line-dasharray": [2, 2] },
       });
+      // Todo el mapa base, los límites y el radio quedan debajo de H3 y tiendas.
+      for (const { id, color } of [
+        { id: "mobility-nearby", color: "#ff8a36" },
+        { id: "mobility-nearby-gain", color: "#ed6948" },
+        { id: "mobility-nearby-loss", color: "#4b9acb" },
+      ]) {
+        map.addLayer({
+          id,
+          type: "circle",
+          source: "mobility-stores",
+          minzoom: 11,
+          layout: { visibility: "none" },
+          paint: {
+            "circle-radius": ["interpolate", ["linear"], ["zoom"], 11, 22, 13, 32, 16, 44],
+            "circle-color": color,
+            "circle-blur": 0.5,
+            "circle-opacity": 0,
+          },
+        });
+      }
       map.fitBounds(countryBounds[defaultCountry.id], {
         padding: 48,
         duration: 0,
@@ -426,13 +419,13 @@ export default function MapExplorer() {
   useEffect(() => {
     const map = mapRef.current;
     if (!mapReady || !map) return;
-    const source = map.getSource("mobility-heat") as maplibregl.GeoJSONSource;
+    const source = map.getSource("mobility-stores") as maplibregl.GeoJSONSource;
     source.setData({
       type: "FeatureCollection",
       features: filteredMobility.map((sample) => ({
         type: "Feature" as const,
         geometry: { type: "Point" as const, coordinates: sample.coordinates },
-        properties: Object.fromEntries(sample.intensityByHour.map((value, index) => ["h" + index, value])),
+        properties: Object.fromEntries(sample.passersbyByHour.map((value, index) => ["p" + index, value])),
       })),
     });
   }, [filteredMobility, mapReady]);
@@ -440,14 +433,17 @@ export default function MapExplorer() {
   useEffect(() => {
     const map = mapRef.current;
     if (!mapReady || !map) return;
-    map.setLayoutProperty("mobility-heat", "visibility", visible.mobility && !comparison ? "visible" : "none");
-    map.setLayoutProperty("mobility-gain", "visibility", visible.mobility && comparison ? "visible" : "none");
-    map.setLayoutProperty("mobility-loss", "visibility", visible.mobility && comparison ? "visible" : "none");
-    map.setPaintProperty("mobility-heat", "heatmap-weight", ["get", "h" + hour]);
-    map.setPaintProperty("mobility-gain", "heatmap-weight",
-      ["max", 0, ["-", ["get", "h" + hour], ["get", "h" + compareHour]]]);
-    map.setPaintProperty("mobility-loss", "heatmap-weight",
-      ["max", 0, ["-", ["get", "h" + compareHour], ["get", "h" + hour]]]);
+    map.setLayoutProperty("mobility-nearby", "visibility", visible.mobility && !comparison ? "visible" : "none");
+    map.setLayoutProperty("mobility-nearby-gain", "visibility", visible.mobility && comparison ? "visible" : "none");
+    map.setLayoutProperty("mobility-nearby-loss", "visibility", visible.mobility && comparison ? "visible" : "none");
+    map.setPaintProperty("mobility-nearby", "circle-color",
+      ["interpolate", ["linear"], ["get", "p" + hour], 20, "#fff3a3", 90, "#ffe36a", 160, "#ffb83d", 220, "#ff7938"]);
+    map.setPaintProperty("mobility-nearby", "circle-opacity",
+      ["interpolate", ["linear"], ["get", "p" + hour], 20, 0.58, 220, 0.85]);
+    map.setPaintProperty("mobility-nearby-gain", "circle-opacity",
+      ["*", 0.005, ["max", 0, ["-", ["get", "p" + hour], ["get", "p" + compareHour]]]]);
+    map.setPaintProperty("mobility-nearby-loss", "circle-opacity",
+      ["*", 0.005, ["max", 0, ["-", ["get", "p" + compareHour], ["get", "p" + hour]]]]);
   }, [visible.mobility, hour, compareHour, comparison, mapReady]);
 
   useEffect(() => {
@@ -458,30 +454,17 @@ export default function MapExplorer() {
 
   const storeResolution = level === 0 ? 5 : level === 1 ? 6 : 7;
   const storeHexes = useMemo(
-    () => aggregateStores(filteredStores, country.brands, storeResolution),
-    [filteredStores, country, storeResolution],
+    () => aggregateStores(filteredStores, storeResolution),
+    [filteredStores, storeResolution],
   );
-  const storesByHex = useMemo(() => {
-    const grouped = new Map<string, Store[]>();
-    for (const store of filteredStores) {
-      const hex = cellToParent(store.hex, storeResolution);
-      const list = grouped.get(hex) ?? [];
-      list.push(store);
-      grouped.set(hex, list);
-    }
-    return grouped;
-  }, [filteredStores, storeResolution]);
-  const showStore = (store: Store, count?: number, position?: number) => {
+  const selectedHex = selected?.hexId
+    ? storeHexes.find((item) => item.hex === selected.hexId)
+    : undefined;
+  const showStore = (store: Store) => {
     lastOverlayClickRef.current = Date.now();
     setSelected({
       title: store.name,
-      detail:
-        store.brandName +
-        " · " +
-        store.city +
-        (count
-          ? " · " + position + " de " + count + " tiendas en esta celda"
-          : ""),
+      detail: store.brandName + " · " + store.city,
       address: store.address,
       description: store.description,
       hex: store.hex,
@@ -495,17 +478,19 @@ export default function MapExplorer() {
       output.push(
         new H3HexagonLayer({
           id: country.id + "-store-hexes-" + storeResolution,
+          beforeId: "mobility-nearby",
+          parameters: { depthWriteEnabled: false },
           data: storeHexes,
           getHexagon: (item) => item.hex,
           getFillColor: (item) =>
-            [...item.color, visible.mobility ? Math.min(95, 30 + item.count * 2) : Math.min(210, 75 + item.count * 4)] as [
+            [...hexColor(item), visible.mobility ? 130 : 240] as [
               number,
               number,
               number,
               number,
             ],
           getLineColor: (item) =>
-            [...item.color, visible.mobility ? 130 : 230] as [number, number, number, number],
+            [...hexColor(item), 235] as [number, number, number, number],
           lineWidthMinPixels: 1,
           stroked: true,
           filled: true,
@@ -526,16 +511,13 @@ export default function MapExplorer() {
                 return;
               }
             }
-            const candidates = storesByHex.get(info.object.hex) ?? [];
-            if (!candidates.length) return;
-            const key = country.id + ":" + info.object.hex;
-            const next = hexClickRef.current.get(key) ?? 0;
-            showStore(
-              candidates[next % candidates.length],
-              candidates.length,
-              (next % candidates.length) + 1,
-            );
-            hexClickRef.current.set(key, next + 1);
+            const cell = info.object as StoreHex;
+            lastOverlayClickRef.current = Date.now();
+            setSelected({
+              title: "Celda H3",
+              detail: "Cobertura de cadenas en esta zona",
+              hexId: cell.hex,
+            });
           },
         }),
       );
@@ -546,12 +528,12 @@ export default function MapExplorer() {
             data: filteredStores,
             getPosition: (item) => item.coordinates,
             getRadius: 90,
-            radiusMinPixels: 4,
-            radiusMaxPixels: 9,
+            radiusMinPixels: 6,
+            radiusMaxPixels: 11,
             getFillColor: (item) =>
-              [...item.color, 240] as [number, number, number, number],
+              [...item.color, 255] as [number, number, number, number],
             getLineColor: [255, 255, 255, 255],
-            lineWidthMinPixels: 1,
+            lineWidthMinPixels: 2,
             stroked: true,
             pickable: true,
             onClick: (info) => {
@@ -569,7 +551,6 @@ export default function MapExplorer() {
     level,
     storeHexes,
     storeResolution,
-    storesByHex,
   ]);
   useEffect(() => {
     overlayRef.current?.setProps({ layers });
@@ -577,7 +558,17 @@ export default function MapExplorer() {
 
   return (
     <main className="workspace">
-      <aside className="sidebar">
+      <aside className={"sidebar" + (mobileFiltersOpen ? " sidebar-open" : "")}>
+        <button type="button" className="mobile-filter-toggle"
+          aria-expanded={mobileFiltersOpen}
+          onClick={() => setMobileFiltersOpen((current) => !current)}>
+          <span className="mobile-filter-symbol"><Filter size={18} aria-hidden="true" /></span>
+          <span className="mobile-filter-toggle-copy">
+            <strong>Filtros del mapa</strong>
+            <small>{country.name} · {filteredStores.length} tiendas</small>
+          </span>
+          <span className="mobile-filter-chevron" aria-hidden="true"><ChevronUp size={19} /></span>
+        </button>
         <div className="brand">
           <div className="miq-logo-wrap">
             <img src="/miq-logo.png" alt="MiQ" width="92" height="38" />
@@ -591,9 +582,7 @@ export default function MapExplorer() {
         <div className="divider" />
         <section className="section">
           <span className="eyebrow">01 / MERCADO</span>
-          <label className="field-label" htmlFor="country">
-            País
-          </label>
+          <label className="field-label label-with-icon" htmlFor="country"><Globe2 size={16} aria-hidden="true" /> País</label>
           <select
             id="country"
             value={countryId}
@@ -614,7 +603,7 @@ export default function MapExplorer() {
         </section>
         <div className="divider" />
         <section className="section search-section">
-          <label className="field-label" htmlFor="map-search">Buscar ubicación o ciudad</label>
+          <label className="field-label label-with-icon" htmlFor="map-search"><Search size={16} aria-hidden="true" /> Buscar ubicación o ciudad</label>
           <input id="map-search" type="search" value={searchQuery}
             placeholder="Ej. Costco Miami"
             onChange={(event) => setSearchQuery(event.target.value)} />
@@ -633,6 +622,7 @@ export default function MapExplorer() {
                       showStore(result.store);
                     }
                     setSearchQuery("");
+                    setMobileFiltersOpen(false);
                   }}>
                   <span>{result.kind === "city" ? "Ciudad" : "Tienda"}</span>
                   <strong>{result.label}</strong>
@@ -654,7 +644,7 @@ export default function MapExplorer() {
           <div className="section-heading">
             <div>
               <span className="eyebrow">02 / EXPLORAR</span>
-              <h2>Señales en el mapa</h2>
+              <h2 className="label-with-icon"><Layers3 size={19} aria-hidden="true" /> Señales en el mapa</h2>
             </div>
             <span className="count">3</span>
           </div>
@@ -672,6 +662,7 @@ export default function MapExplorer() {
                   }
                 />
                 <span className="swatch" style={{ background: layer.color }} />
+                <span className="layer-symbol" style={{ color: layer.color }}><layer.icon size={18} aria-hidden="true" /></span>
                 <span className="layer-copy">
                   <strong>{layer.name}</strong>
                   <small>{layer.description}</small>
@@ -682,8 +673,12 @@ export default function MapExplorer() {
           </div>
           <div className="brand-list" aria-label="Filtrar cadenas de tiendas">
             <div className="brand-list-heading">
-              <span className="eyebrow">CADENAS EN {country.name.toUpperCase()}</span>
+              <span className="eyebrow label-with-icon"><StoreIcon size={14} aria-hidden="true" /> CADENAS EN {country.name.toUpperCase()}</span>
               <span>{filteredStores.length} puntos</span>
+            </div>
+            <div className="brand-actions">
+              <button type="button" onClick={() => setHiddenBrands([])}>Mostrar todas</button>
+              <button type="button" onClick={() => setHiddenBrands(country.brands.map((brand) => brand.id))}>Ocultar todas</button>
             </div>
             {country.brands.map((brand) => (
               <div className="brand-row" key={brand.id}>
@@ -700,9 +695,23 @@ export default function MapExplorer() {
             ))}
             <p>Filtra las cadenas para comparar sus H3 y el calor simulado. Las ubicaciones son ficticias.</p>
           </div>
+          <div className="hex-legend" aria-label="Colores de las celdas H3">
+            <strong>H3 · variedad de cadenas</strong>
+            <p>El color muestra cuántas cadenas visibles tienen puntos en cada celda. Pulsa una celda para ver el detalle.</p>
+            <div className="hex-legend-items">
+              {[
+                { label: "1", color: [74, 129, 179] },
+                { label: "2–3", color: [114, 83, 178] },
+                { label: "4–7", color: [177, 61, 164] },
+                { label: "8+", color: [208, 54, 101] },
+              ].map((step) => (
+                <span key={step.label}><i style={{ background: `rgb(${step.color.join(",")})` }} />{step.label}</span>
+              ))}
+            </div>
+          </div>
           <div className="hour-control">
             <div className="hour-heading">
-              <label htmlFor="mobility-hour">Actividad por hora</label>
+              <label className="label-with-icon" htmlFor="mobility-hour"><Clock3 size={16} aria-hidden="true" /> Actividad por hora</label>
               <output htmlFor="mobility-hour">{String(hour).padStart(2, "0")}:00</output>
             </div>
             <input id="mobility-hour" type="range" min="0" max="23" step="1"
@@ -749,14 +758,14 @@ export default function MapExplorer() {
                 </div>
               </div>
             )}
-            <p className="mobility-note">Actividad simulada cerca de tiendas. El índice es relativo; no representa personas ni trayectorias reales.</p>
+            <p className="mobility-note">Personas por hora simuladas cerca de cada tienda. Los halos aparecen desde zoom 11; no son mediciones reales.</p>
           </div>
           <div className="legend">
-            <span>Concentración simulada a las {String(hour).padStart(2, "0")}:00</span>
+            <span>Personas simuladas por tienda a las {String(hour).padStart(2, "0")}:00 · visible desde zoom 11</span>
             <div className="legend-gradient" />
             <div className="legend-scale">
-              <span>Menor</span>
-              <span>Mayor concentración</span>
+              <span>20 por hora</span>
+              <span>220 por hora</span>
             </div>
           </div>
         </section>
@@ -764,6 +773,8 @@ export default function MapExplorer() {
           <span className="status-dot" /> Prototipo para MiQ · Datos simulados
         </div>
       </aside>
+      {mobileFiltersOpen && <button type="button" className="mobile-filter-backdrop"
+        aria-label="Cerrar filtros del mapa" onClick={() => setMobileFiltersOpen(false)} />}
       <section
         className="map-area"
         aria-label="Mapa de límites, tiendas H3 y calor de movilidad"
@@ -775,11 +786,27 @@ export default function MapExplorer() {
             <span className="pill-separator" />{" "}
             {boundaryLevelName(country.id, level)}
           </div>
-          <div className="map-label">
-            MIQ <span>/</span> GEO RETAIL <small>DEMO</small>
+          <div className="map-top-actions">
+            <button type="button" className="reset-view" onClick={() => {
+              const map = mapRef.current;
+              if (!map) return;
+              setSelected(null);
+              map.fitBounds(countryBounds[country.id], {
+                padding: map.getContainer().clientWidth < 700 ? 24 : 48,
+                duration: 850,
+                maxZoom: 5,
+                bearing: 0,
+                pitch: 0,
+              });
+            }} aria-label="Restablecer encuadre, giro e inclinación del mapa">
+              <RotateCcw size={15} aria-hidden="true" /> Restablecer vista
+            </button>
+            <div className="map-label">
+              MIQ <span>/</span> GEO RETAIL <small>DEMO</small>
+            </div>
           </div>
         </div>
-        {selected && (
+        {selected && (!selected.hexId || selectedHex) && (
           <div className="selection-card">
             <button
               type="button"
@@ -791,6 +818,23 @@ export default function MapExplorer() {
             <span className="eyebrow">PERFIL DE UBICACIÓN</span>
             <strong>{selected.title}</strong>
             <p>{selected.detail}</p>
+            {selectedHex && (
+              <div className="hex-details">
+                <p><strong>{selectedHex.count}</strong> puntos de ejemplo · <strong>{Object.keys(selectedHex.brandCounts).length}</strong> cadenas</p>
+                <div className="hex-brand-breakdown">
+                  {country.brands.filter((brand) => selectedHex.brandCounts[brand.id])
+                    .sort((a, b) => selectedHex.brandCounts[b.id] - selectedHex.brandCounts[a.id])
+                    .map((brand) => (
+                      <div key={brand.id}>
+                        <i style={{ background: `rgb(${brand.color.join(",")})` }} />
+                        <span>{brand.name}</span>
+                        <strong>{selectedHex.brandCounts[brand.id]}</strong>
+                      </div>
+                    ))}
+                </div>
+                <code>{selectedHex.hex}</code>
+              </div>
+            )}
             {selected.address && (
               <p>
                 <strong>Dirección ficticia</strong>
@@ -802,8 +846,8 @@ export default function MapExplorer() {
             {selectedStore && (
               <div className="store-analysis">
                 <div className="analysis-heading">
-                  <strong>Actividad por hora</strong>
-                  <span>{String(hour).padStart(2, "0")}:00 · {storeProfile[hour]}/100</span>
+                  <strong>Personas simuladas cerca</strong>
+                  <span>{String(hour).padStart(2, "0")}:00 · {storePassersby} por hora</span>
                 </div>
                 <svg viewBox="0 0 280 104" role="img"
                   aria-label={"Perfil horario simulado de " + selectedStore.name}>
